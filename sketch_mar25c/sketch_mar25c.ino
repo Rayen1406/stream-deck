@@ -32,7 +32,7 @@
 #define BTN2 17      // Green  → Volume Down
 #define BTN3 18      // Yellow → Play/Pause
 #define BTN4 19      // Red    → Mute
-#define CONFIG_BTN 4 // Config button → Hold 2s to enter config mode
+#define CONFIG_BTN 4  // Config button → Hold 2s to enter config mode
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -65,18 +65,18 @@ struct MediaAction {
 };
 
 const MediaAction MEDIA_ACTIONS[] = {
-  { "Vol Up",     {32, 0} },   // KEY_MEDIA_VOLUME_UP
-  { "Vol Down",   {64, 0} },   // KEY_MEDIA_VOLUME_DOWN
-  { "Play/Pause", {8, 0} },    // KEY_MEDIA_PLAY_PAUSE
-  { "Mute",       {16, 0} },   // KEY_MEDIA_MUTE
-  { "Next",       {2, 0} },    // KEY_MEDIA_NEXT_TRACK
-  { "Prev",       {4, 0} },    // KEY_MEDIA_PREVIOUS_TRACK
-  { "Stop",       {1, 0} },    // KEY_MEDIA_STOP
-  { "Fast Fwd",   {128, 0} },  // KEY_MEDIA_FAST_FORWARD
-  { "Rewind",     {0, 1} },    // KEY_MEDIA_REWIND
-  { "Home",       {0, 2} },    // KEY_MEDIA_WWW_HOME
-  { "Search",     {0, 4} },    // KEY_MEDIA_WWW_SEARCH
-  { "Bookmarks",  {0, 8} },    // KEY_MEDIA_WWW_BOOKMARKS
+  { "VOL+",     {32, 0} },   // KEY_MEDIA_VOLUME_UP
+  { "VOL-",     {64, 0} },   // KEY_MEDIA_VOLUME_DOWN
+  { "PLAY",     {8, 0} },    // KEY_MEDIA_PLAY_PAUSE
+  { "MUTE",     {16, 0} },   // KEY_MEDIA_MUTE
+  { "NEXT",     {2, 0} },    // KEY_MEDIA_NEXT_TRACK
+  { "PREV",     {4, 0} },    // KEY_MEDIA_PREVIOUS_TRACK
+  { "STOP",     {1, 0} },    // KEY_MEDIA_STOP
+  { "FWD",      {128, 0} },  // KEY_MEDIA_FAST_FORWARD
+  { "RWD",      {0, 1} },    // KEY_MEDIA_REWIND
+  { "HOME",     {0, 2} },    // KEY_MEDIA_WWW_HOME
+  { "FIND",     {0, 4} },    // KEY_MEDIA_WWW_SEARCH
+  { "BMARK",    {0, 8} },    // KEY_MEDIA_WWW_BOOKMARKS
 };
 
 const uint8_t MEDIA_ACTION_COUNT = sizeof(MEDIA_ACTIONS) / sizeof(MEDIA_ACTIONS[0]);
@@ -108,10 +108,10 @@ struct Button {
 };
 
 Button buttons[] = {
-  { BTN1, {32, 0},  "Vol Up",     HIGH, false, 0, 0, 0 },
-  { BTN2, {64, 0},  "Vol Down",   HIGH, false, 0, 0, 0 },
-  { BTN3, {8, 0},   "Play/Pause", HIGH, false, 0, 0, 0 },
-  { BTN4, {16, 0},  "Mute",       HIGH, false, 0, 0, 0 },
+  { BTN1, {32, 0},  "VOL+",     HIGH, false, 0, 0, 0 },
+  { BTN2, {64, 0},  "VOL-",     HIGH, false, 0, 0, 0 },
+  { BTN3, {8, 0},   "PLAY",     HIGH, false, 0, 0, 0 },
+  { BTN4, {16, 0},  "MUTE",     HIGH, false, 0, 0, 0 },
 };
 
 const uint8_t BTN_COUNT = sizeof(buttons) / sizeof(buttons[0]);
@@ -316,14 +316,22 @@ void drawButtonRow(uint8_t index, bool pressed, bool force) {
     display.setTextColor(SH110X_WHITE);
   }
 
-  // Button number
-  display.setCursor(4, y + 2);
-  display.print("BTN");
-  display.print(index + 1);
+  // Color code (2 chars + space)
+  const char* colorCode;
+  switch(index) {
+    case 0: colorCode = "BLU"; break;  // Blue - was BTN1
+    case 1: colorCode = "GRN"; break;  // Green - was BTN2
+    case 2: colorCode = "YLW"; break;  // Yellow - was BTN3
+    case 3: colorCode = "RED"; break;  // Red - was BTN4
+    default: colorCode = "???";
+  }
+  
+  display.setCursor(2, y + 2);
+  display.print(colorCode);
 
-  // Label
-  display.setCursor(40, y + 2);
-  display.print(buttons[index].label);
+    // Label (shortened)
+    display.setCursor(32, y + 2);
+    display.print(buttons[index].label);
 
   // Reset text color
   display.setTextColor(SH110X_WHITE);
@@ -557,30 +565,36 @@ void drawConfigMode() {
   // Status bar
   display.setCursor(0, 0);
   display.setTextSize(1);
-  display.print("CONFIG MODE");
+  display.print("SETUP");
 
   // Horizontal divider
   display.drawLine(0, 10, 127, 10, SH110X_WHITE);
 
   if (configState == STATE_SELECT_BUTTON) {
     // Show all buttons, highlight selected
-    display.setCursor(0, 14);
-    display.print("Select button:");
-
     for (uint8_t i = 0; i < BTN_COUNT; i++) {
-      int16_t y = 26 + (i * 10);
+      int16_t y = 14 + (i * 12);
+      
+      // Get color code
+      const char* colorCode;
+      switch(i) {
+        case 0: colorCode = "BLU"; break;
+        case 1: colorCode = "GRN"; break;
+        case 2: colorCode = "YLW"; break;
+        case 3: colorCode = "RED"; break;
+        default: colorCode = "???";
+      }
 
       if (i == selectedButtonIndex) {
-        display.fillRect(0, y - 1, 128, 10, SH110X_WHITE);
+        display.fillRect(0, y - 1, 128, 11, SH110X_WHITE);
         display.setTextColor(SH110X_BLACK);
       } else {
         display.setTextColor(SH110X_WHITE);
       }
 
-      display.setCursor(4, y);
-      display.print("BTN");
-      display.print(i + 1);
-      display.print(": ");
+      display.setCursor(2, y + 1);
+      display.print(colorCode);
+      display.print(" ");
       display.print(buttons[i].label);
 
       display.setTextColor(SH110X_WHITE);
@@ -588,33 +602,38 @@ void drawConfigMode() {
 
     // Instructions
     display.setCursor(0, 62);
-    display.print("Press=Select, CFG=Exit");
+    display.print("SEL=Pick CFG=Exit");
 
   } else if (configState == STATE_SELECT_ACTION) {
-    // Show selected button and current/preview action
+    // Get color code for selected button
+    const char* colorCode;
+    switch(selectedButtonIndex) {
+      case 0: colorCode = "BLU"; break;
+      case 1: colorCode = "GRN"; break;
+      case 2: colorCode = "YLW"; break;
+      case 3: colorCode = "RED"; break;
+      default: colorCode = "???";
+    }
+    
+    // Show selected button
     display.setCursor(0, 14);
-    display.print("BTN");
-    display.print(selectedButtonIndex + 1);
-    display.print(" action:");
-
-    // Current assignment
-    display.setCursor(0, 26);
-    display.print("Current: ");
+    display.print(colorCode);
+    display.print(" ");
     display.print(buttons[selectedButtonIndex].label);
 
     // Preview (highlighted)
-    display.fillRect(0, 37, 128, 12, SH110X_WHITE);
+    display.fillRect(0, 27, 128, 14, SH110X_WHITE);
     display.setTextColor(SH110X_BLACK);
-    display.setCursor(4, 39);
-    display.print("> ");
+    display.setCursor(4, 30);
+    display.print(">");
     display.print(MEDIA_ACTIONS[selectedActionIndex].name);
     display.setTextColor(SH110X_WHITE);
 
     // Controls
-    display.setCursor(0, 52);
-    display.print("B1/2=Prev/Next  B3=Save");
-    display.setCursor(0, 60);
-    display.print("B4=Cancel  CFG=Exit");
+    display.setCursor(0, 46);
+    display.print("BLU/GRN: Prev/Next");
+    display.setCursor(0, 54);
+    display.print("YLW:Save RED:Can CFG:Exit");
   }
 
   display.display();

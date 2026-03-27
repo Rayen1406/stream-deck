@@ -36,11 +36,11 @@ The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with 
 
 | Component | GPIO Pin | Function |
 |-----------|----------|----------|
-| BTN1 (Blue) | GPIO 16 | Volume Up (configurable) |
-| BTN2 (Green) | GPIO 17 | Volume Down (configurable) |
-| BTN3 (Yellow) | GPIO 18 | Play/Pause (configurable) |
-| BTN4 (Red) | GPIO 19 | Mute (configurable) |
-| **CFG** (White/Black) | **GPIO 23** | **Hold 2s to enter config mode** |
+| BTN1 (Blue) | GPIO 16 | VOL+ (configurable) |
+| BTN2 (Green) | GPIO 17 | VOL- (configurable) |
+| BTN3 (Yellow) | GPIO 18 | PLAY (configurable) |
+| BTN4 (Red) | GPIO 19 | MUTE (configurable) |
+| **CFG** (White/Black) | **GPIO 4** | **Hold 2s to enter config mode** |
 | OLED SDA | GPIO 21 | I2C Data |
 | OLED SCL | GPIO 22 | I2C Clock |
 
@@ -48,11 +48,11 @@ The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with 
 
 **Buttons** (connect between GPIO and GND):
 ```
-GPIO 16 ──[ BTN1 ]── GND   (Volume Up)
-GPIO 17 ──[ BTN2 ]── GND   (Volume Down)
-GPIO 18 ──[ BTN3 ]── GND   (Play/Pause)
-GPIO 19 ──[ BTN4 ]── GND   (Mute)
-GPIO 23 ──[ CFG ]─── GND   (Config Button — Hold 2s)
+GPIO 16 ──[ BLU ]── GND   (VOL+)
+GPIO 17 ──[ GRN ]── GND   (VOL-)
+GPIO 18 ──[ YLW ]── GND   (PLAY)
+GPIO 19 ──[ RED ]── GND   (MUTE)
+GPIO 4 ──[ CFG ]─── GND   (Config Button — Hold 2s)
 ```
 
 **OLED Display** (1.3" SH1106 I2C, address 0x3C):
@@ -72,7 +72,7 @@ The internal `INPUT_PULLUP` resistors handle button wiring — no external resis
 You can remap buttons without recompiling the firmware:
 
 ### Enter Config Mode
-1. **Hold the CFG button for 2 seconds** (GPIO 23)
+1. **Hold the CFG button for 2 seconds** (GPIO 4)
 2. OLED shows "CONFIG MODE" with button list
 3. Auto-exits after 10 seconds of inactivity
 
