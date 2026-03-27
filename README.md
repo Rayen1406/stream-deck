@@ -36,10 +36,11 @@ The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with 
 
 | Component | GPIO Pin | Function |
 |-----------|----------|----------|
-| BTN1 (Blue) | GPIO 16 | Volume Up |
-| BTN2 (Green) | GPIO 17 | Volume Down |
-| BTN3 (Yellow) | GPIO 18 | Play/Pause |
-| BTN4 (Red) | GPIO 19 | Mute |
+| BTN1 (Blue) | GPIO 16 | Volume Up (configurable) |
+| BTN2 (Green) | GPIO 17 | Volume Down (configurable) |
+| BTN3 (Yellow) | GPIO 18 | Play/Pause (configurable) |
+| BTN4 (Red) | GPIO 19 | Mute (configurable) |
+| **CFG** (White/Black) | **GPIO 23** | **Hold 2s to enter config mode** |
 | OLED SDA | GPIO 21 | I2C Data |
 | OLED SCL | GPIO 22 | I2C Clock |
 
@@ -51,6 +52,7 @@ GPIO 16 ──[ BTN1 ]── GND   (Volume Up)
 GPIO 17 ──[ BTN2 ]── GND   (Volume Down)
 GPIO 18 ──[ BTN3 ]── GND   (Play/Pause)
 GPIO 19 ──[ BTN4 ]── GND   (Mute)
+GPIO 23 ──[ CFG ]─── GND   (Config Button — Hold 2s)
 ```
 
 **OLED Display** (1.3" SH1106 I2C, address 0x3C):
@@ -62,6 +64,35 @@ OLED SCL → GPIO 22
 ```
 
 The internal `INPUT_PULLUP` resistors handle button wiring — no external resistors needed.
+
+---
+
+## Configuration Mode
+
+You can remap buttons without recompiling the firmware:
+
+### Enter Config Mode
+1. **Hold the CFG button for 2 seconds** (GPIO 23)
+2. OLED shows "CONFIG MODE" with button list
+3. Auto-exits after 10 seconds of inactivity
+
+### Remap a Button
+1. **Press any BTN1-4** to select which button to configure
+2. OLED shows current assignment and preview of new action
+3. **BTN1**: Previous action | **BTN2**: Next action
+4. **BTN3**: Save & return to button list
+5. **BTN4**: Cancel & return
+6. **Press CFG**: Exit config mode (saves automatically)
+
+### Available Actions
+- Volume Up / Down
+- Play/Pause / Stop
+- Next / Previous Track
+- Fast Forward / Rewind
+- Mute
+- Home / Search / Bookmarks (browser control)
+
+Settings persist in ESP32 flash memory (NVS) and survive reboots.
 
 ---
 
@@ -217,8 +248,8 @@ stream-deck/
 - [x] BLE HID mode (no host software required)
 - [x] macOS Sequoia compatibility
 - [x] OLED display with connection status and button labels
+- [x] Configurable button mapping (via config button + OLED)
 - [ ] Support for long-press and double-press detection
-- [ ] Configurable button mapping via BLE
 - [ ] Battery level reporting on OLED
 - [ ] More buttons / shift layers
 
