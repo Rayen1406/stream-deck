@@ -73,24 +73,24 @@ You can remap buttons without recompiling the firmware:
 
 ### Enter Config Mode
 1. **Hold the CFG button for 2 seconds** (GPIO 4)
-2. OLED shows "CONFIG MODE" with button list
+2. OLED shows "SETUP" with color-coded button list
 3. Auto-exits after 10 seconds of inactivity
 
 ### Remap a Button
-1. **Press any BTN1-4** to select which button to configure
+1. **Press BLU, GRN, YLW, or RED** to select which button to configure
 2. OLED shows current assignment and preview of new action
-3. **BTN1**: Previous action | **BTN2**: Next action
-4. **BTN3**: Save & return to button list
-5. **BTN4**: Cancel & return
+3. **BLU (BTN1)**: Previous action | **GRN (BTN2)**: Next action
+4. **YLW (BTN3)**: Save & return to button list
+5. **RED (BTN4)**: Cancel & return
 6. **Press CFG**: Exit config mode (saves automatically)
 
 ### Available Actions
-- Volume Up / Down
-- Play/Pause / Stop
-- Next / Previous Track
-- Fast Forward / Rewind
-- Mute
-- Home / Search / Bookmarks (browser control)
+- VOL+ / VOL- (Volume Up/Down)
+- PLAY / STOP (Play/Pause/Stop)
+- NEXT / PREV (Next/Previous Track)
+- FWD / RWD (Fast Forward/Rewind)
+- MUTE
+- HOME / FIND / BMAR (Browser controls)
 
 Settings persist in ESP32 flash memory (NVS) and survive reboots.
 
