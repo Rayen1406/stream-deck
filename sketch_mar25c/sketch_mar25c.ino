@@ -1,128 +1,180 @@
 /*
- * ESP32 Stream Deck — BLE HID Media Controller
+ * ESP32 Stream Deck — BLE HID Media Controller with OLED
  *
  * Connects to macOS as a Bluetooth keyboard/media remote.
- * No drivers or host scripts needed.
+ * Features 1.3" SH1106 OLED display for status and visual feedback.
  *
- * Button mapping:
- *   BTN1 (Blue,   GPIO 14) → Volume Up
- *   BTN2 (Green,  GPIO 27) → Volume Down
- *   BTN3 (Yellow, GPIO 26) → Play/Pause
- *   BTN4 (Red,    GPIO 25) → Mute
+ * Pinout (30-pin ESP32, right side):
+ *   BTN1 (Blue,   GPIO 16) → Volume Up
+ *   BTN2 (Green,  GPIO 17) → Volume Down
+ *   BTN3 (Yellow, GPIO 18) → Play/Pause
+ *   BTN4 (Red,    GPIO 19) → Mute
+ *   OLED SDA → GPIO 21
+ *   OLED SCL → GPIO 22
+ *   OLED VCC → VIN (5V)
+ *   OLED GND → GND
  *
- * Library required:
- *   "ESP32 BLE Keyboard" by T-vK
- *   Install via Arduino Library Manager or:
- *   https://github.com/T-vK/ESP32-BLE-Keyboard
+ * Libraries required:
+ *   - ESP32 BLE Keyboard by T-vK (NimBLE-patched)
+ *   - Adafruit SH110X by Adafruit
+ *   - Adafruit SSD1306 (dependency)
+ *   - Adafruit GFX Library (dependency)
  */
 
 #include <BleKeyboard.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
 
 // ── Pin definitions ──────────────────────────────────────────────────────────
-#define BTN1 14  // Blue   → Volume Up
-#define BTN2 27  // Green  → Volume Down
-#define BTN3 26  // Yellow → Play/Pause
-#define BTN4 25  // Red    → Mute
+#define BTN1 16  // Blue   → Volume Up
+#define BTN2 17  // Green  → Volume Down
+#define BTN3 18  // Yellow → Play/Pause
+#define BTN4 19  // Red    → Mute
 
-// ESP32 built-in LED (GPIO 2 on most dev boards, or change to your board's LED pin)
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define OLED_ADDR 0x3C
+
+// ESP32 built-in LED
 #define LED_BUILTIN 2
 
-// ── Tuning ───────────────────────────────────────────────────────────────────
-#define DEBOUNCE_MS   50    // debounce window in milliseconds
-#define REPEAT_MS     300   // delay before hold-repeat kicks in
-#define REPEAT_RATE   80    // interval between repeated presses while held (ms)
+// ── OLED Display ─────────────────────────────────────────────────────────────
+Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &Wire, -1);
 
-// ── BLE device identity (shows up on your Mac's Bluetooth menu) ───────────────
+// ── Tuning ───────────────────────────────────────────────────────────────────
+#define DEBOUNCE_MS   50
+#define REPEAT_MS     300
+#define REPEAT_RATE   80
+
+// ── BLE device identity ────────────────────────────────────────────────────────
 BleKeyboard bleKeyboard("StreamDeck", "DIY", 100);
 
-// ── Button state tracker ─────────────────────────────────────────────────────
+// ── Button configuration ─────────────────────────────────────────────────────
 struct Button {
   uint8_t  pin;
-  uint8_t  key[2];              // MediaKeyReport as 2-element array
-  bool     lastRaw;             // raw pin reading last loop
-  bool     pressed;             // debounced pressed state
-  uint32_t lastChangeMs;        // when raw state last changed (for debounce)
-  uint32_t heldSinceMs;         // when debounced press started (for repeat)
-  uint32_t lastRepeatMs;        // last repeat fire time
+  uint8_t  key[2];
+  const char* label;
+  bool     lastRaw;
+  bool     pressed;
+  uint32_t lastChangeMs;
+  uint32_t heldSinceMs;
+  uint32_t lastRepeatMs;
 };
 
 Button buttons[] = {
-  { BTN1, {32, 0},   HIGH, false, 0, 0, 0 },  // KEY_MEDIA_VOLUME_UP
-  { BTN2, {64, 0},   HIGH, false, 0, 0, 0 },  // KEY_MEDIA_VOLUME_DOWN
-  { BTN3, {8, 0},    HIGH, false, 0, 0, 0 },  // KEY_MEDIA_PLAY_PAUSE
-  { BTN4, {16, 0},   HIGH, false, 0, 0, 0 },  // KEY_MEDIA_MUTE
+  { BTN1, {32, 0},  "Vol Up",     HIGH, false, 0, 0, 0 },
+  { BTN2, {64, 0},  "Vol Down",   HIGH, false, 0, 0, 0 },
+  { BTN3, {8, 0},   "Play/Pause", HIGH, false, 0, 0, 0 },
+  { BTN4, {16, 0},  "Mute",       HIGH, false, 0, 0, 0 },
 };
 
 const uint8_t BTN_COUNT = sizeof(buttons) / sizeof(buttons[0]);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-void sendKey(MediaKeyReport key) {
-  bleKeyboard.press(key);
-  delay(10);
-  bleKeyboard.release(key);
-}
+// ── Display state tracking ───────────────────────────────────────────────────
+bool lastConnState = false;
+bool lastPressedStates[4] = {false, false, false, false};
+bool screenNeedsRedraw = true;
 
-// ── Setup ─────────────────────────────────────────────────────────────────────
+// ── Forward declarations ─────────────────────────────────────────────────────
+void drawScreen(bool force = false);
+void drawStatusBar(bool connected);
+void drawButtonRow(uint8_t index, bool pressed, bool force = false);
+void sendKey(MediaKeyReport key);
+
+// ── Setup ────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   Serial.println("[Stream Deck] Booting...");
 
+  // Initialize buttons
   for (uint8_t i = 0; i < BTN_COUNT; i++) {
     pinMode(buttons[i].pin, INPUT_PULLUP);
     buttons[i].lastRaw = HIGH;
   }
 
+  // Initialize LED
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  // Initialize OLED
+  Wire.begin(OLED_SDA, OLED_SCL);
+  delay(250);
+  if (!display.begin(OLED_ADDR, true)) {
+    Serial.println("[Stream Deck] OLED initialization failed!");
+  } else {
+    Serial.println("[Stream Deck] OLED initialized.");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    display.display();
+  }
+
+  // Initialize BLE
   bleKeyboard.begin();
-  Serial.println("[Stream Deck] BLE advertising — pair from your Mac's Bluetooth settings.");
+  Serial.println("[Stream Deck] BLE advertising — pair from Bluetooth settings.");
+
+  // Initial screen draw
+  drawScreen(true);
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
 void loop() {
-  static bool wasConnected = false;
   bool nowConnected = bleKeyboard.isConnected();
-  
-  if (nowConnected != wasConnected) {
-    wasConnected = nowConnected;
+
+  // Check connection state change
+  if (nowConnected != lastConnState) {
+    lastConnState = nowConnected;
+    screenNeedsRedraw = true;
     if (nowConnected) {
-      Serial.println("[Stream Deck] CONNECTED to Mac!");
+      Serial.println("[Stream Deck] CONNECTED!");
       digitalWrite(LED_BUILTIN, HIGH);
     } else {
-      Serial.println("[Stream Deck] DISCONNECTED — restarting advertising");
+      Serial.println("[Stream Deck] DISCONNECTED");
+      digitalWrite(LED_BUILTIN, LOW);
     }
   }
-  
+
+  // Handle disconnected state (blink LED)
   if (!nowConnected) {
-    // Blink the built-in LED while waiting for a connection
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    delay(500);
-    return;
+    static uint32_t lastBlink = 0;
+    if (millis() - lastBlink > 500) {
+      lastBlink = millis();
+      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    }
   }
 
+  // Process buttons
   uint32_t now = millis();
+  bool anyButtonChanged = false;
 
   for (uint8_t i = 0; i < BTN_COUNT; i++) {
     Button &btn = buttons[i];
-    bool raw = digitalRead(btn.pin);  // LOW = pressed (pull-up)
+    bool raw = digitalRead(btn.pin);
 
-    // ── Debounce ────────────────────────────────────────────────────────────
+    // Debounce
     if (raw != btn.lastRaw) {
       btn.lastChangeMs = now;
       btn.lastRaw = raw;
     }
 
-    if ((now - btn.lastChangeMs) < DEBOUNCE_MS) continue;  // still bouncing
+    if ((now - btn.lastChangeMs) < DEBOUNCE_MS) continue;
 
     bool isPressed = (raw == LOW);
 
-    // ── Leading edge: first press ────────────────────────────────────────────
-    if (isPressed && !btn.pressed) {
-      btn.pressed      = true;
-      btn.heldSinceMs  = now;
-      btn.lastRepeatMs = now;
-      sendKey(btn.key);
+    // Press state changed?
+    if (isPressed != btn.pressed) {
+      btn.pressed = isPressed;
+      anyButtonChanged = true;
+
+      if (isPressed) {
+        btn.heldSinceMs = now;
+        btn.lastRepeatMs = now;
+        sendKey(btn.key);
+      }
     }
 
-    // ── Hold: repeat while held ──────────────────────────────────────────────
+    // Hold repeat
     if (isPressed && btn.pressed) {
       if ((now - btn.heldSinceMs) > REPEAT_MS &&
           (now - btn.lastRepeatMs) > REPEAT_RATE) {
@@ -130,10 +182,106 @@ void loop() {
         btn.lastRepeatMs = now;
       }
     }
+  }
 
-    // ── Release ──────────────────────────────────────────────────────────────
-    if (!isPressed && btn.pressed) {
-      btn.pressed = false;
+  // Redraw screen if needed
+  if (screenNeedsRedraw || anyButtonChanged) {
+    drawScreen(screenNeedsRedraw);
+    screenNeedsRedraw = false;
+  }
+}
+
+// ── Send media key ───────────────────────────────────────────────────────────
+void sendKey(MediaKeyReport key) {
+  if (bleKeyboard.isConnected()) {
+    bleKeyboard.press(key);
+    delay(10);
+    bleKeyboard.release(key);
+  }
+}
+
+// ── Draw complete screen ─────────────────────────────────────────────────────
+void drawScreen(bool force) {
+  bool connected = bleKeyboard.isConnected();
+
+  // Check what needs updating
+  bool statusChanged = (connected != lastConnState) || force;
+  bool anyButtonChanged = force;
+
+  for (uint8_t i = 0; i < BTN_COUNT; i++) {
+    if (buttons[i].pressed != lastPressedStates[i]) {
+      lastPressedStates[i] = buttons[i].pressed;
+      anyButtonChanged = true;
     }
   }
+
+  if (!statusChanged && !anyButtonChanged && !force) return;
+
+  // Full redraw only on force/connection change, otherwise partial
+  if (force || statusChanged) {
+    display.clearDisplay();
+    drawStatusBar(connected);
+
+    // Horizontal divider
+    display.drawLine(0, 10, 127, 10, SH110X_WHITE);
+
+    // Draw all button rows
+    for (uint8_t i = 0; i < BTN_COUNT; i++) {
+      drawButtonRow(i, buttons[i].pressed, true);
+    }
+  } else if (anyButtonChanged) {
+    // Only redraw changed button rows
+    for (uint8_t i = 0; i < BTN_COUNT; i++) {
+      drawButtonRow(i, buttons[i].pressed, false);
+    }
+  }
+
+  display.display();
+}
+
+// ── Draw status bar ─────────────────────────────────────────────────────────
+void drawStatusBar(bool connected) {
+  // Left: "StreamDeck"
+  display.setCursor(0, 0);
+  display.setTextSize(1);
+  display.print("StreamDeck");
+
+  // Right: connection status
+  display.setCursor(80, 0);
+  if (connected) {
+    display.print("BLE OK");
+  } else {
+    display.print("pairing..");
+  }
+}
+
+// ── Draw button row ───────────────────────────────────────────────────────────
+void drawButtonRow(uint8_t index, bool pressed, bool force) {
+  if (!force && (pressed == lastPressedStates[index])) return;
+
+  int16_t y = 14 + (index * 12);  // 12 pixels per row, starting below divider
+
+  // Clear row area
+  display.fillRect(0, y, 128, 12, SH110X_BLACK);
+
+  if (pressed) {
+    // Inverted: white background, black text
+    display.fillRect(0, y, 128, 12, SH110X_WHITE);
+    display.setTextColor(SH110X_BLACK);
+  } else {
+    // Normal: black background, white text
+    display.setTextColor(SH110X_WHITE);
+  }
+
+  // Button number
+  display.setCursor(4, y + 2);
+  display.print("BTN");
+  display.print(index + 1);
+
+  // Label
+  display.setCursor(40, y + 2);
+  display.print(buttons[index].label);
+
+  // Reset text color
+  display.setTextColor(SH110X_WHITE);
 }

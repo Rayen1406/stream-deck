@@ -1,20 +1,24 @@
 # ESP32 Stream Deck
 
-A minimal BLE HID media controller built with an ESP32. Connects wirelessly to your computer as a Bluetooth keyboard/remote — no drivers, no serial scripts, no wires.
+A minimal BLE HID media controller built with an ESP32. Connects wirelessly to your computer as a Bluetooth keyboard/remote — no drivers, no serial scripts, no wires. Features a 1.3" OLED display for status and visual feedback.
 
 **Features:**
 - Volume Up/Down
 - Play/Pause
 - Mute
+- OLED display with connection status and button labels
+- Visual feedback on button press (inverted row highlighting)
 
 ---
 
 ## How It Works
 
-The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with macOS/Windows/Linux and sends standard media key commands. No host-side software required.
+The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with macOS/Windows/Linux and sends standard media key commands. No host-side software required. The OLED display shows connection status and provides visual feedback when buttons are pressed.
 
 ```
 [ Button Press ] → ESP32 → BLE HID → OS Media Keys
+                    ↓
+                 OLED Display (status + visual feedback)
 ```
 
 ---
@@ -23,27 +27,41 @@ The ESP32 acts as a BLE HID device (Bluetooth keyboard). It pairs directly with 
 
 | Component | Details |
 |-----------|---------|
-| Microcontroller | ESP32 (any variant with BLE) |
+| Microcontroller | ESP32 (30-pin DevKit) |
 | Buttons | 4× momentary push buttons |
+| Display | 1.3" SH1106 I2C OLED (128×64) |
 | Connection | Bluetooth LE |
+
+### Pinout (30-pin ESP32 — right side)
+
+| Component | GPIO Pin | Function |
+|-----------|----------|----------|
+| BTN1 (Blue) | GPIO 16 | Volume Up |
+| BTN2 (Green) | GPIO 17 | Volume Down |
+| BTN3 (Yellow) | GPIO 18 | Play/Pause |
+| BTN4 (Red) | GPIO 19 | Mute |
+| OLED SDA | GPIO 21 | I2C Data |
+| OLED SCL | GPIO 22 | I2C Clock |
 
 ### Wiring
 
-| Button | GPIO Pin | Function |
-|--------|----------|----------|
-| BTN1 (Blue) | GPIO 14 | Volume Up |
-| BTN2 (Green) | GPIO 27 | Volume Down |
-| BTN3 (Yellow) | GPIO 26 | Play/Pause |
-| BTN4 (Red) | GPIO 25 | Mute |
-
-Each button connects between its GPIO pin and **GND**. The internal `INPUT_PULLUP` resistors handle the rest — no external resistors needed.
-
+**Buttons** (connect between GPIO and GND):
 ```
-GPIO 14 ──[ BTN1 ]── GND   (Volume Up)
-GPIO 27 ──[ BTN2 ]── GND   (Volume Down)
-GPIO 26 ──[ BTN3 ]── GND   (Play/Pause)
-GPIO 25 ──[ BTN4 ]── GND   (Mute)
+GPIO 16 ──[ BTN1 ]── GND   (Volume Up)
+GPIO 17 ──[ BTN2 ]── GND   (Volume Down)
+GPIO 18 ──[ BTN3 ]── GND   (Play/Pause)
+GPIO 19 ──[ BTN4 ]── GND   (Mute)
 ```
+
+**OLED Display** (1.3" SH1106 I2C, address 0x3C):
+```
+OLED VCC → VIN (5V)
+OLED GND → GND
+OLED SDA → GPIO 21
+OLED SCL → GPIO 22
+```
+
+The internal `INPUT_PULLUP` resistors handle button wiring — no external resistors needed.
 
 ---
 
@@ -55,6 +73,9 @@ GPIO 25 ──[ BTN4 ]── GND   (Mute)
 - ESP32 board package (version 3.3.6 or later)
 - **ESP32 BLE Keyboard** library (custom-patched for NimBLE)
 - **NimBLE-Arduino** library (version 2.3.8)
+- **Adafruit SH110X** library (for 1.3" OLED)
+- **Adafruit SSD1306** library (dependency)
+- **Adafruit GFX Library** (dependency)
 
 ### Library Installation
 
@@ -70,7 +91,12 @@ cd ~/Documents/Arduino/libraries
 git clone https://github.com/T-vK/ESP32-BLE-Keyboard.git
 ```
 
-**3. Apply NimBLE 2.x patches** to `BleKeyboard.h` and `BleKeyboard.cpp` (see Troubleshooting section for details).
+**3. Install OLED libraries (via Arduino Library Manager):**
+- **Adafruit SH110X** by Adafruit — for 1.3" SH1106 OLED
+- **Adafruit SSD1306** — will be installed automatically as dependency
+- **Adafruit GFX Library** — will be installed automatically as dependency
+
+**4. Apply NimBLE 2.x patches** to `BleKeyboard.h` and `BleKeyboard.cpp` (see Troubleshooting section for details).
 
 ### Upload
 
@@ -168,7 +194,9 @@ The stock ESP32 BLE Keyboard library needs patches for NimBLE-Arduino 2.3.8 comp
 | Device appears but won't pair | Delete Bluetooth cache files and restart |
 | Compilation error about NimBLE | Install NimBLE-Arduino: `git clone --depth 1 https://github.com/h2zero/NimBLE-Arduino.git` |
 | Works on Android but not macOS | Enable bonding in library, use Remote Control appearance |
-| Buttons not responding | Check Serial Monitor for "CONNECTED" message; ensure BLE is paired |
+| OLED not working | Check wiring: SDA→GPIO 21, SCL→GPIO 22, VCC→5V, GND→GND |
+| OLED shows garbage | Verify I2C address is 0x3C in sketch |
+| Display flickering | Check power supply — OLED needs stable 5V |
 
 ---
 
@@ -188,10 +216,10 @@ stream-deck/
 
 - [x] BLE HID mode (no host software required)
 - [x] macOS Sequoia compatibility
-- [ ] Add OLED display to show connection status
+- [x] OLED display with connection status and button labels
 - [ ] Support for long-press and double-press detection
 - [ ] Configurable button mapping via BLE
-- [ ] Battery level reporting
+- [ ] Battery level reporting on OLED
 - [ ] More buttons / shift layers
 
 ---
